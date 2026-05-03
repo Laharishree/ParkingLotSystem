@@ -1,6 +1,6 @@
 # ParkingLotSystem
 
-##Problem statement
+## sProblem statement
 You are tasked with designing a parking system for a multi-level parking lot. The parking lot can accommodate different types of vehicles, including motorcycles, cars, and buses. The system should efficiently manage the parking process, including vehicle entry, parking slot assignment, and exit.
 
 Requirements
