@@ -1,4 +1,4 @@
-namespace ParkingLot.Vehicles;
+namespace ParkingLotSystem.Vehicles;
 
 public interface IVehicle
 {
