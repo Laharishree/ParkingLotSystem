@@ -26,7 +26,20 @@ public class ParkingLot
 
         return _instance;
     }
-
+    public string GetParkingLotStatus()
+    {
+        var status = new System.Text.StringBuilder();
+        foreach (var level in parkingLevels)
+        {
+            status.AppendLine($"Level {level.LevelNumber}:");
+            foreach (var spot in level.ParkingSpots)
+            {
+                var occupancy = spot.IsOccupied ? $"Occupied by {spot.ParkedVehicle?.LicensePlate}" : "Available";
+                status.AppendLine($"  Spot {spot.SpotNumber} ({spot.SpotType}): {occupancy}");
+            }
+        }
+        return status.ToString();
+    }
     public void AddLevel(int LevelNumber, int numberOfMotorCycle, int numberOfCar, int numberOfBus)
     {
         var level = new ParkingLevel
@@ -34,14 +47,15 @@ public class ParkingLot
             LevelNumber = LevelNumber,
             ParkingSpots = new List<ParkingSpot>()
         };
+        parkingLevels.Add(level);
         AddSlot(LevelNumber, numberOfMotorCycle, VehicleType.Motorcycle);
         AddSlot(LevelNumber, numberOfCar, VehicleType.Car);
         AddSlot(LevelNumber, numberOfBus, VehicleType.Bus);
-        parkingLevels.Add(level);
     }
     public void AddSlot(int LevelNumber, int numberofSlot, VehicleType vehicleType)
     {
         var level = parkingLevels.FirstOrDefault(l => l.LevelNumber == LevelNumber);
+        int spotCounter = level?.ParkingSpots.Count(s => s.SpotType == vehicleType) ?? 0;
         if (level != null)
         {
             for (int i = 0; i < numberofSlot; i++)
@@ -50,7 +64,8 @@ public class ParkingLot
                 {
                     IsOccupied = false,
                     SpotType = vehicleType,
-                    SpotNumber = i
+                    SpotNumber = spotCounter + i + 1,
+                    LevelNumber = LevelNumber
                 });
             }
         }
@@ -72,15 +87,16 @@ public class ParkingLot
 public class ParkingLevel
 {
     public int LevelNumber { get; set; }
-    public List<ParkingSpot> ParkingSpots { get; set; }
+    public required List<ParkingSpot> ParkingSpots { get; set; }
 
 }
 public class ParkingSpot
 {
-    public bool IsOccupied { get; set; }
+    public required int LevelNumber { get; set; }
+    public required bool IsOccupied { get; set; }
     public IVehicle? ParkedVehicle { get; set; }
-    public int SpotNumber { get; set; }
-    public VehicleType SpotType { get; set; }
+    public required int SpotNumber { get; set; }
+    public required VehicleType SpotType { get; set; }
 }
 //Find a parking spot strategy interface
 public interface IFindSpotStrategy
@@ -88,17 +104,9 @@ public interface IFindSpotStrategy
     ParkingSpot? FindSpot(List<ParkingLevel> parkingLevels, IVehicle vehicle);
 
 }
-public interface IParkVehicle
-{
-    public string ParkVehicle(IVehicle vehicle);
-    public List<VehicleType> GetAllowedSpotTypes(IVehicle vehicle);
-    public string UnparkVehicle(string licensePlate);
-    public IParkingFeeCalculator GetFeeCalculator(IVehicle vehicle);
-}
+
 public class FindSpotStrategy : IFindSpotStrategy
 {
-    public static ParkingLot parkingLot = ParkingLot.CreateParkingLot();
-
     public ParkingSpot? FindSpot(List<ParkingLevel> levels, IVehicle vehicle)
     {
         var allowedTypes = GetAllowedSpotTypes(vehicle);
@@ -117,13 +125,41 @@ public class FindSpotStrategy : IFindSpotStrategy
 
         return null;
     }
+    private List<VehicleType> GetAllowedSpotTypes(IVehicle vehicle)
+    {
+        return vehicle.GetVehicleType() switch
+        {
+            VehicleType.Motorcycle => [VehicleType.Motorcycle, VehicleType.Car],
+
+            VehicleType.Car => [VehicleType.Car, VehicleType.Bus],
+
+            VehicleType.Bus => [VehicleType.Bus],
+
+            _ => []
+        };
+    }
 
 }
-public class ParkVehicle : IParkVehicle
+public interface IParkVehicle
+{
+    public string ParkVehicle(IVehicle vehicle);
+    public string UnparkVehicle(string licensePlate);
+    public static ParkingFeeCalculator GetFeeCalculator(IVehicle vehicle)
+    {
+        return vehicle.GetVehicleType() switch
+        {
+            VehicleType.Motorcycle => new MotorcycleFeeCalculator(),
+            VehicleType.Car => new CarFeeCalculator(),
+            VehicleType.Bus => new BusFeeCalculator(),
+            _ => throw new ArgumentOutOfRangeException()
+        };
+    }
+}
+public class ParkingVehicle : IParkVehicle
 {
     private static ParkingLot parkingLot = ParkingLot.CreateParkingLot();
-    private readonly IParkingFeeCalculator? feeCalculator;
-    private readonly IFindSpotStrategy? findSpotStrategy;
+    private ParkingFeeCalculator? feeCalculator;
+    private IFindSpotStrategy findSpotStrategy = new FindSpotStrategy();
     public string ParkVehicle(IVehicle vehicle)
     {
         var spot = findSpotStrategy.FindSpot(parkingLot.parkingLevels, vehicle);
@@ -148,7 +184,7 @@ public class ParkVehicle : IParkVehicle
             {
                 spot.IsOccupied = false;
                 spot.ParkedVehicle.ParkingDuration.EndTime = DateTime.Now;
-                feeCalculator = GetFeeCalculator(spot.ParkedVehicle);
+                feeCalculator = IParkVehicle.GetFeeCalculator(spot.ParkedVehicle);
                 var fee = feeCalculator.CalculateFee(spot.ParkedVehicle);
                 spot.ParkedVehicle = null;
 
@@ -157,7 +193,7 @@ public class ParkVehicle : IParkVehicle
         }
         return $"Vehicle with license plate {licensePlate} not found in the parking lot.";
     }
-    public List<VehicleType> GetAllowedSpotTypes(IVehicle vehicle)
+    private static List<VehicleType> GetAllowedSpotTypes(IVehicle vehicle)
     {
         return vehicle.GetVehicleType() switch
         {
@@ -170,22 +206,37 @@ public class ParkVehicle : IParkVehicle
             _ => []
         };
     }
-    public static IParkingFeeCalculator GetFeeCalculator(IVehicle vehicle)
-    {
-        return vehicle.GetVehicleType() switch
-        {
-            VehicleType.Motorcycle => new MotorcycleFeeCalculator(),
-            VehicleType.Car => new CarFeeCalculator(),
-            VehicleType.Bus => new BusFeeCalculator(),
-            _ => throw new ArgumentOutOfRangeException()
-        };
-    }
 }
 //Manager
 public class ParkingLotManager
 {
+    public static ParkingLot parkingLot = ParkingLot.CreateParkingLot();
+    private static ParkingVehicle parkingVehicle = new ParkingVehicle();
 
+    public string ParkVehicle(IVehicle vehicle)
+    {
+        return parkingVehicle.ParkVehicle(vehicle);
+    }
 
+    public string UnparkVehicle(string licensePlate)
+    {
+        return parkingVehicle.UnparkVehicle(licensePlate);
+    }
+    public void AddLevel(int LevelNumber, int numberOfMotorCycle, int numberOfCar, int numberOfBus)
+    {
+        parkingLot.AddLevel(LevelNumber, numberOfMotorCycle, numberOfCar, numberOfBus);
+    }
+    public void AddSlot(int LevelNumber, int numberofSlot, VehicleType vehicleType)
+    {
+        parkingLot.AddSlot(LevelNumber, numberofSlot, vehicleType);
+    }
+    public void RemoveSlot(int LevelNumber, int numberofSlot, VehicleType vehicleType)
+    {
+        parkingLot.RemoveSlot(LevelNumber, numberofSlot, vehicleType);
+    }
 
-
+    public string GetParkingLotStatus()
+    {
+        return parkingLot.GetParkingLotStatus();
+    }
 }

@@ -10,13 +10,13 @@ public interface IVehicle
 public class Duration
 {
     public DateTime StartTime { get; set; }
-    public DateTime? EndTime { get; set; }
+    public DateTime EndTime { get; set; }
 }
 
 public class Car : IVehicle
 {
-    public string LicensePlate { get; set; }
-    public Duration ParkingDuration { get; set; }
+    public required string LicensePlate { get; set; }
+    public required Duration ParkingDuration { get; set; }
     public VehicleType GetVehicleType()
     {
         return VehicleType.Car;
@@ -25,8 +25,8 @@ public class Car : IVehicle
 
 public class Motorcycle : IVehicle
 {
-    public string LicensePlate { get; set; }
-    public Duration ParkingDuration { get; set; }
+    public required string LicensePlate { get; set; }
+    public required Duration ParkingDuration { get; set; }
     public VehicleType GetVehicleType()
     {
         return VehicleType.Motorcycle;
@@ -34,8 +34,8 @@ public class Motorcycle : IVehicle
 }
 public class Bus : IVehicle
 {
-    public string LicensePlate { get; set; }
-    public Duration ParkingDuration { get; set; }
+    public required string LicensePlate { get; set; }
+    public required Duration ParkingDuration { get; set; }
     public VehicleType GetVehicleType()
     {
         return VehicleType.Bus;
@@ -63,30 +63,30 @@ public enum VehicleType
     Bus
 }
 
-public abstract class IParkingFeeCalculator
+public abstract class ParkingFeeCalculator
 {
     public abstract int CalculateFee(IVehicle vehicle);
     public int GetTotalHours(IVehicle vehicle)
     {
-        var totalHours = vehicle.ParkingDuration.EndTime.Value.TimeOfDay - vehicle.ParkingDuration.StartTime.TimeOfDay;
-        return totalHours.Hours + (totalHours.Minutes > 0 ? 1 : 0); 
+        var totalHours = (vehicle.ParkingDuration.EndTime - vehicle.ParkingDuration.StartTime).TotalHours;
+        return (int)Math.Ceiling(totalHours);
     }
 }
-public class MotorcycleFeeCalculator : IParkingFeeCalculator
+public class MotorcycleFeeCalculator : ParkingFeeCalculator
 {
     public override int CalculateFee(IVehicle vehicle)
     {
         return 1 * GetTotalHours(vehicle); // Flat fee for motorcycles
     }
 }
-public class CarFeeCalculator : IParkingFeeCalculator
+public class CarFeeCalculator : ParkingFeeCalculator
 {
     public override int CalculateFee(IVehicle vehicle)
     {
         return 2 * GetTotalHours(vehicle); // Flat fee for cars
     }
 }
-public class BusFeeCalculator : IParkingFeeCalculator
+public class BusFeeCalculator : ParkingFeeCalculator
 {
     public override int CalculateFee(IVehicle vehicle)
     {
